@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense & Investment Manager Pro</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6a0dad">
+<style>
+body { font-family: Arial, sans-serif; background: #f0f8ff; padding: 10px; transition: background 0.3s, color 0.3s;}
+body.dark { background: #000000; color: #ffffff; }
+h1,h2 { text-align: center; color: #6a0dad; }
+body.dark h1,body.dark h2 { color: #dda0dd; }
+.container { display: flex; flex-direction: column; gap: 20px; max-width: 100%; margin: auto; }
+.form,.summary,.investment { background: #fff; padding: 15px; border-radius:10px; box-shadow:0 0 10px #ccc; transition: background 0.3s,color 0.3s;}
+body.dark .form,body.dark .summary,body.dark .investment { background:#121212;color:#e0e0e0; }
+input,select,button { width: 100%; padding:12px; margin:8px 0; border-radius:8px; border:1px solid #ccc; font-size:16px; }
+body.dark input,body.dark select { background:#333; color:#fff; border:1px solid #555;}
+button { background: linear-gradient(90deg,#6a0dad,#00bfff); color:white; border:none; cursor:pointer;}
+table { width:100%; border-collapse: collapse; margin-top:10px; font-size:14px;}
+th,td { padding:8px; text-align:left; border-bottom:1px solid #ccc;}
+body.dark th,body.dark td { border-color:#555; }
+th { background:#6a0dad; color:white; cursor:pointer; }
+body.dark th { background:#dda0dd; color:black;}
+.delete-btn,.edit-btn { padding:6px 10px; border-radius:5px; color:white; cursor:pointer; font-size:12px; margin-right:3px;}
+.delete-btn { background:red;}
+.edit-btn { background:orange;}
+canvas { margin-top:15px; max-width:100%; }
+.theme-toggle { background:gray; margin-top:5px;}
+.export-btn { background:green; margin-top:5px;}
+.filter-category { margin-bottom:10px;}
+</style>
+</head>
+<body>
+<h1>Expense & Investment Manager Pro</h1>
+<button class="theme-toggle" onclick="toggleTheme()">Toggle Dark/Light Theme</button>
+<div class="container">
+
+<!-- Expenses Section -->
+<div class="form">
+<h2>Expenses</h2>
+<label for="yearSelect">Year:</label>
+<select id="yearSelect" onchange="changeYear()"></select>
+<label for="monthSelect">Month:</label>
+<select id="monthSelect" onchange="changeMonth()"></select>
+<input type="number" id="salaryInput" placeholder="Salary for Month" onchange="setSalary()">
+<input type="text" id="expenseName" placeholder="Expense Name">
+<input type="number" id="expenseAmount" placeholder="Amount">
+<select id="expenseCategory">
+  <option value="Bills">Bills</option>
+  <option value="Food">Food</option>
+  <option value="Transport">Transport</option>
+  <option value="Savings">Savings</option>
+  <option value="Investment">Investment</option>
+  <option value="Chit Fund">Chit Fund</option>
+  <option value="Mutual Fund">Mutual Fund</option>
+  <option value="EMI">EMI</option>
+  <option value="Health Emergency">Health Emergency</option>
+  <option value="Others">Others</option>
+</select>
+<button onclick="saveExpense()">Save Expense</button>
+<label>Filter:</label>
+<select id="filterCategory" class="filter-category" onchange="updateTable()">
+  <option value="All">All</option>
+  <option value="Bills">Bills</option>
+  <option value="Food">Food</option>
+  <option value="Transport">Transport</option>
+  <option value="Savings">Savings</option>
+  <option value="Investment">Investment</option>
+  <option value="Chit Fund">Chit Fund</option>
+  <option value="Mutual Fund">Mutual Fund</option>
+  <option value="EMI">EMI</option>
+  <option value="Health Emergency">Health Emergency</option>
+  <option value="Others">Others</option>
+</select>
+<button class="export-btn" onclick="downloadPDF()">Download PDF</button>
+<div style="overflow-x:auto;">
+<table id="expenseTable">
+<thead><tr><th>Name</th><th>Amount</th><th>Category</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+<!-- Investments Section -->
+<div class="investment">
+<h2>Investments</h2>
+<input type="text" id="invName" placeholder="Investment Name">
+<input type="number" id="invAmount" placeholder="Amount">
+<select id="invType">
+<option value="Stock">Stock/Trading</option>
+<option value="Mutual Fund">Mutual Fund</option>
+</select>
+<button onclick="saveInvestment()">Save Investment</button>
+<div style="overflow-x:auto;">
+<table id="investmentTable">
+<thead><tr><th>Name</th><th>Amount</th><th>Type</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+<!-- Summary Section -->
+<div class="summary">
+<h2>Summary</h2>
+<p>Salary: ₹<span id="salaryDisplay">0</span></p>
+<p>Total Expenses: ₹<span id="totalExpense">0</span></p>
+<p>Remaining: ₹<span id="remaining">0</span></p>
+<p>Total Investment: ₹<span id="totalInvestment">0</span></p>
+<canvas id="expenseChart"></canvas>
+<canvas id="investmentChart"></canvas>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+let yearSelect = document.getElementById('yearSelect');
+let monthSelect = document.getElementById('monthSelect');
+let salary = 0, expenses = {}, investments = {};
+let expenseChart, investmentChart;
+
+// --- Theme Toggle ---
+function toggleTheme(){ document.body.classList.toggle('dark'); }
+
+// --- Populate Year and Month ---
+let currentYear = new Date().getFullYear();
+for(let y=currentYear-10; y<=currentYear+10; y++){
+    let opt=document.createElement('option'); opt.value=y; opt.text=y; yearSelect.add(opt);
+}
+const monthNames=["January","February","March","April","May","June","July","August","September","October","November","December"];
+monthNames.forEach((m,i)=>{ let opt=document.createElement('option'); opt.value=i; opt.text=m; monthSelect.add(opt);});
+yearSelect.value=currentYear; monthSelect.value=new Date().getMonth();
+
+// --- Save Salary ---
+function setSalary(){ salary=parseFloat(document.getElementById('salaryInput').value)||0; updateSummary();}
+
+// --- Save Expense ---
+function saveExpense(){
+    let name=document.getElementById('expenseName').value;
+    let amount=parseFloat(document.getElementById('expenseAmount').value)||0;
+    let cat=document.getElementById('expenseCategory').value;
+    let key=yearSelect.value+'-'+monthSelect.value;
+    if(!expenses[key]) expenses[key]=[];
+    expenses[key].push({name,amount,cat});
+    updateTable();
+}
+
+// --- Save Investment ---
+function saveInvestment(){
+    let name=document.getElementById('invName').value;
+    let amount=parseFloat(document.getElementById('invAmount').value)||0;
+    let type=document.getElementById('invType').value;
+    let key=yearSelect.value+'-'+monthSelect.value;
+    if(!investments[key]) investments[key]=[];
+    investments[key].push({name,amount,type});
+    updateTable();
+}
+
+// --- Update Table and Charts ---
+function updateTable(){
+    let tbody=document.querySelector('#expenseTable tbody'); tbody.innerHTML='';
+    let key=yearSelect.value+'-'+monthSelect.value;
+    let filter=document.getElementById('filterCategory').value;
+    if(expenses[key]){
+        expenses[key].forEach((e,i)=>{
+            if(filter=='All'||filter==e.cat){
+                let tr=document.createElement('tr');
+                tr.innerHTML=`<td>${e.name}</td><td>${e.amount}</td><td>${e.cat}</td>
+                <td><button class="edit-btn" onclick="editExpense(${i})">Edit</button>
+                    <button class="delete-btn" onclick="deleteExpense(${i})">Delete</button></td>`;
+                tbody.appendChild(tr);
+            }
+        });
+    }
+    updateSummary();
+    updateCharts();
+}
+
+// --- Edit/Delete Expense ---
+function editExpense(index){
+    let key=yearSelect.value+'-'+monthSelect.value;
+    let e=expenses[key][index];
+    document.getElementById('expenseName').value=e.name;
+    document.getElementById('expenseAmount').value=e.amount;
+    document.getElementById('expenseCategory').value=e.cat;
+    expenses[key].splice(index,1);
+    updateTable();
+}
+function deleteExpense(index){
+    let key=yearSelect.value+'-'+monthSelect.value;
+    expenses[key].splice(index,1); updateTable();
+}
+
+// --- Update Summary ---
+function updateSummary(){
+    let key=yearSelect.value+'-'+monthSelect.value;
+    let totalExp=0, totalInv=0;
+    if(expenses[key]) totalExp=expenses[key].reduce((a,b)=>a+b.amount,0);
+    if(investments[key]) totalInv=investments[key].reduce((a,b)=>a+b.amount,0);
+    document.getElementById('salaryDisplay').innerText=salary;
+    document.getElementById('totalExpense').innerText=totalExp;
+    document.getElementById('totalInvestment').innerText=totalInv;
+    document.getElementById('remaining').innerText=(salary-totalExp-totalInv);
+}
+
+// --- Month/Year Change ---
+function changeYear(){ updateTable(); }
+function changeMonth(){ updateTable(); }
+
+// --- PDF Download ---
+function downloadPDF(){
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text("Expense & Investment Summary",10,10);
+    let key=yearSelect.value+'-'+monthSelect.value; let y=20;
+    if(expenses[key]) expenses[key].forEach(e=>{ doc.text(`${e.name} - ₹${e.amount} - ${e.cat}`,10,y); y+=7; });
+    if(investments[key]) investments[key].forEach(i=>{ doc.text(`${i.name} - ₹${i.amount} - ${i.type}`,10,y); y+=7; });
+    doc.save("summary.pdf");
+}
+
+// --- Charts ---
+function updateCharts(){
+    let key=yearSelect.value+'-'+monthSelect.value;
+    // Expenses Pie
+    let expData={}; if(expenses[key]) expenses[key].forEach(e=>{ if(!expData[e.cat]) expData[e.cat]=0; expData[e.cat]+=e.amount; });
+    const expLabels=Object.keys(expData); const expValues=Object.values(expData);
+    if(expenseChart) expenseChart.destroy();
+    expenseChart = new Chart(document.getElementById('expenseChart'), { type:'pie', data:{labels:expLabels,datasets:[{data:expValues, backgroundColor:['#6a0dad','#00bfff','#ff6347','#ffa500','#32cd32','#ff69b4','#8a2be2','#20b2aa','#ff4500']}] } });
+
+    // Investments Pie
+    let invData={}; if(investments[key]) investments[key].forEach(i=>{ if(!invData[i.type]) invData[i.type]=0; invData[i.type]+=i.amount; });
+    const invLabels=Object.keys(invData); const invValues=Object.values(invData);
+    if(investmentChart) investmentChart.destroy();
+    investmentChart = new Chart(document.getElementById('investmentChart'), { type:'pie', data:{labels:invLabels,datasets:[{data:invValues, backgroundColor:['#00bfff','#6a0dad']}] } });
+}
+</script>
+</body>
+</html>
